@@ -94,7 +94,7 @@ log() {
         local escaped="${msg//\"/\"\"}"
         echo "$(date '+%Y-%m-%d %H:%M:%S'),$level,$action,\"$escaped\"" >> "$LOG_FILE"
     else
-        echo -e "$msg"
+        echo -e "$msg" >&2
     fi
 }
 
@@ -196,10 +196,12 @@ fi
 if [[ "${CONVERT_DOCX:-true}" == "true" ]]; then
     log "Converting .docx files to markdown" "INFO" "convert_start"
     result=$(convert_docx_to_md "$SYNC_DIR")
-    total_converted=$(echo "$result" | cut -d' ' -f1)
-    total_failed=$(echo "$result" | cut -d' ' -f2)
+    total_converted=$(echo "$result" | tail -1 | cut -d' ' -f1)
+    total_failed=$(echo "$result" | tail -1 | cut -d' ' -f2)
+    total_converted=${total_converted:-0}
+    total_failed=${total_failed:-0}
     log "Converted $total_converted files to markdown" "INFO" "convert_end"
-    if [[ $total_failed -gt 0 ]]; then
+    if [[ "$total_failed" -gt 0 ]] 2>/dev/null; then
         log "Failed to convert $total_failed files (kept as .docx)" "WARN" "convert_end"
     fi
 fi
