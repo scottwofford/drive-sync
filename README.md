@@ -8,6 +8,9 @@ Config-driven Google Drive sync to local directories. Uses rclone for syncing, p
 - Auto-convert `.docx` files to `.md` (via pandoc)
 - Optional git commit + push
 - Optional reverse sync (local files back to Drive)
+- Explicit `MODE` per config (`forward` | `reverse` | `both`, default `both`)
+- Refuses to start when `MODE=both` with `REMOTE == REVERSE_SYNC_REMOTE` (the topology error fixed in [COE 2026-05-02](./coes/COE-2026-05-02-private-claude-code-docs-clobber.md))
+- `--update` on forward sync so Drive cannot overwrite a newer local file
 - macOS notifications on errors
 - Pre-flight auth check (catches expired OAuth tokens)
 - Stranded commit recovery (retries failed pushes)
