@@ -159,6 +159,18 @@ if ! rclone lsd "$PREFLIGHT_REMOTE:" --max-depth 0 --quiet 2>/dev/null; then
     exit 1
 fi
 
+# --- Capture pre-sync git state (for post-sync correctness check) ---
+# If LOCAL_DIR is a git working tree, snapshot which tracked files are
+# modified before sync. Compared against post-sync state to detect silent
+# clobbers (the class of bug from COE 2026-05-02).
+
+GIT_TRACKED=false
+PRE_GIT_TRACKED_MODS=""
+if [[ -d "$LOCAL_DIR/.git" || -f "$LOCAL_DIR/.git" ]]; then
+    GIT_TRACKED=true
+    PRE_GIT_TRACKED_MODS=$(cd "$LOCAL_DIR" && git status --porcelain 2>/dev/null | grep -E "^.M " | sort)
+fi
+
 # --- Drive → Local sync ---
 
 RCLONE_OPTS=()
@@ -215,6 +227,22 @@ if [[ ( "$MODE" == "reverse" || "$MODE" == "both" ) && -n "$REVERSE_SYNC_REMOTE"
             "${REVERSE_OPTS[@]}" \
             --progress \
             $DRY_RUN || true
+    fi
+fi
+
+# --- Post-sync correctness check ---
+# Compare git-tracked-file modifications before and after sync. Any NEW
+# modification line indicates the sync overwrote a tracked file that
+# wasn't already dirty (the COE 2026-05-02 silent-clobber pattern).
+# Skipped in dry-run mode and when LOCAL_DIR is not a git repo.
+
+if [[ "$GIT_TRACKED" == "true" && -z "$DRY_RUN" ]]; then
+    POST_GIT_TRACKED_MODS=$(cd "$LOCAL_DIR" && git status --porcelain 2>/dev/null | grep -E "^.M " | sort)
+    if [[ "$PRE_GIT_TRACKED_MODS" != "$POST_GIT_TRACKED_MODS" ]]; then
+        NEW_MODS=$(diff <(echo "$PRE_GIT_TRACKED_MODS") <(echo "$POST_GIT_TRACKED_MODS") 2>/dev/null | grep '^> ' | sed 's/^> //' | tr '\n' ';' | sed 's/;$//')
+        if [[ -n "$NEW_MODS" ]]; then
+            log "Sync introduced new tracked-file modifications in $LOCAL_DIR (possible silent clobber): $NEW_MODS" "ERROR" "tracked_clobber"
+        fi
     fi
 fi
 
