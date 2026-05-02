@@ -139,6 +139,15 @@ if [[ "$MODE" == "reverse" && -z "$REVERSE_SYNC_REMOTE" ]]; then
     exit 1
 fi
 
+# Refuse to run if MODE=both with REMOTE == REVERSE_SYNC_REMOTE: this is the
+# topology error that produced COE 2026-05-02 (silent self-clobber loop).
+# The original private-claude-code-docs config hit this; explicit refusal here
+# means future configs cannot reproduce the bug regardless of --update behavior.
+if [[ "$MODE" == "both" && -n "$REMOTE" && "$REMOTE" == "$REVERSE_SYNC_REMOTE" ]]; then
+    log "REMOTE and REVERSE_SYNC_REMOTE are the same ($REMOTE) with MODE=both — refusing to run; set MODE=forward or MODE=reverse to express intent" "ERROR" "config_invalid"
+    exit 1
+fi
+
 if [[ -n "$DRY_RUN" ]]; then
     log "DRY RUN - no files will be changed" "INFO" "dry_run"
 fi

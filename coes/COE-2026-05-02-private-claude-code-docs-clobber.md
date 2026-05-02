@@ -158,13 +158,14 @@ Drive bytes byte-equal to working tree, both Feb 21 mtime, both 73 lines short o
 
 ### Completeness checklist
 
-- [x] An architectural action item exists AND is shipped in this PR (the MODE flag + --update + config update).
+- [x] An architectural action item exists AND is shipped in this PR (the MODE flag + `--update` + same-remote-with-MODE=both preflight refusal + config update).
 - [x] The architectural fix is shipped in this PR; no deferral.
 - [x] No manual install step required by Scott to activate the fix. Existing launchd job will pick up the new `sync.sh` automatically on next 4-hourly tick. Verified via `--dry-run` that `MODE=reverse` skips forward sync and `MODE=both` (default) preserves existing behavior on luthien-org.conf and sw3-google-drive.conf.
+- [x] Launchd plists for both schedules (`com.drive-sync.private-claude-code-docs.plist`, `com.drive-sync.sw3-google-drive.plist`) are now version-controlled in `scripts/`, closing the regression against the Feb 2026 COE's "version-control your launchd plists" lesson.
 - [x] **Completeness gate:** "If a similar but slightly different version of this bug appeared tomorrow in an adjacent area, would this fix prevent it?"
-   - **For the same-remote bidirectional pattern in another config:** the MODE flag is opt-in for new configs but the `--update` defense-in-depth catches it even without MODE. Partial yes.
-   - **For a bidirectional sync between DIFFERENT remotes where one side has older content (the luthien-org pattern):** `--update` prevents the overwrite. Yes.
-   - **For sync silently succeeding while corrupting data via a non-rclone mechanism (e.g. a future cloud-sync tool added to drive-sync):** would NOT prevent. The post-sync correctness check (Detection action item, deferred) is what addresses this. Tracked.
+   - **For the same-remote bidirectional pattern in another config:** **Yes.** The new preflight refuses to start when `MODE=both AND REMOTE==REVERSE_SYNC_REMOTE`, deterministically and without depending on mtime behavior. `--update` is now true defense-in-depth, not the only line of defense. (Devil-critique pickup: the original "partial yes" framing here was load-bearing on `--update` working, which had not been validated against Drive's mtime behavior. Preflight removes that dependency.)
+   - **For a bidirectional sync between DIFFERENT remotes where one side has older content (the luthien-org pattern):** `--update` prevents the overwrite — but Drive mtime reliability is still unverified for this case. Tracked as a separate Trello card to construct an adversarial test (`touch -t 202001010000` on a Drive file, observe whether `--update` skips). Lower priority now that preflight catches the higher-risk pattern.
+   - **For sync silently succeeding while corrupting data via a non-rclone mechanism (e.g. a future cloud-sync tool added to drive-sync):** would NOT prevent. The post-sync correctness check (Detection action item, Trello [b53xIuAX](https://trello.com/c/b53xIuAX)) is what addresses this. Tracked.
 
 ### Remaining risk
 
