@@ -14,6 +14,7 @@
 #   REMOTE="gdrive-luthien"
 #   LOCAL_DIR="/Users/you/build/my-project"
 #   SYNC_SUBDIR=""                              # optional: sync into a subdirectory
+#   MODE="both"                                 # "forward" (Drive→local), "reverse" (local→Drive), "both" (default)
 #   GIT_PUSH=true                               # true/false
 #   CONVERT_DOCX=true                           # true/false
 #   REVERSE_SYNC_REMOTE=""                      # optional: remote for GitHub→Drive sync
@@ -124,12 +125,28 @@ convert_docx_to_md() {
 
 # --- Pre-flight checks ---
 
+MODE="${MODE:-both}"
+case "$MODE" in
+    forward|reverse|both) ;;
+    *)
+        log "Invalid MODE='$MODE' in config (must be forward|reverse|both)" "ERROR" "config_invalid"
+        exit 1
+        ;;
+esac
+
+if [[ "$MODE" == "reverse" && -z "$REVERSE_SYNC_REMOTE" ]]; then
+    log "MODE=reverse requires REVERSE_SYNC_REMOTE to be set" "ERROR" "config_invalid"
+    exit 1
+fi
+
 if [[ -n "$DRY_RUN" ]]; then
     log "DRY RUN - no files will be changed" "INFO" "dry_run"
 fi
 
-if ! rclone lsd "$REMOTE:" --max-depth 0 --quiet 2>/dev/null; then
-    log "rclone cannot connect to $REMOTE — auth token may be expired. Run: rclone config reconnect $REMOTE:" "ERROR" "auth_fail"
+PREFLIGHT_REMOTE="$REMOTE"
+[[ "$MODE" == "reverse" ]] && PREFLIGHT_REMOTE="$REVERSE_SYNC_REMOTE"
+if ! rclone lsd "$PREFLIGHT_REMOTE:" --max-depth 0 --quiet 2>/dev/null; then
+    log "rclone cannot connect to $PREFLIGHT_REMOTE — auth token may be expired. Run: rclone config reconnect $PREFLIGHT_REMOTE:" "ERROR" "auth_fail"
     exit 1
 fi
 
@@ -144,24 +161,32 @@ if [[ "${SKIP_DANGLING_SHORTCUTS:-true}" == "true" ]]; then
     RCLONE_OPTS+=(--drive-skip-dangling-shortcuts)
 fi
 
-log "Syncing $REMOTE → $SYNC_DIR" "INFO" "sync_start"
-if [[ -n "$AUTO_MODE" ]]; then
-    rclone copy "$REMOTE:" "$SYNC_DIR" \
-        --drive-export-formats docx \
-        "${RCLONE_OPTS[@]}" \
-        --quiet \
-        $DRY_RUN 2>> "$LOG_FILE" || true
+if [[ "$MODE" == "forward" || "$MODE" == "both" ]]; then
+    log "Syncing $REMOTE → $SYNC_DIR" "INFO" "sync_start"
+    # --update: skip files where destination is newer than source. Prevents Drive (often
+    # stale relative to local git working tree) from overwriting newer local content.
+    if [[ -n "$AUTO_MODE" ]]; then
+        rclone copy "$REMOTE:" "$SYNC_DIR" \
+            --update \
+            --drive-export-formats docx \
+            "${RCLONE_OPTS[@]}" \
+            --quiet \
+            $DRY_RUN 2>> "$LOG_FILE" || true
+    else
+        rclone copy "$REMOTE:" "$SYNC_DIR" \
+            --update \
+            --drive-export-formats docx \
+            "${RCLONE_OPTS[@]}" \
+            --progress \
+            $DRY_RUN || true
+    fi
 else
-    rclone copy "$REMOTE:" "$SYNC_DIR" \
-        --drive-export-formats docx \
-        "${RCLONE_OPTS[@]}" \
-        --progress \
-        $DRY_RUN || true
+    log "MODE=$MODE — skipping forward sync ($REMOTE → $SYNC_DIR)" "INFO" "sync_skip"
 fi
 
 # --- Local → Drive reverse sync (optional) ---
 
-if [[ -n "$REVERSE_SYNC_REMOTE" ]]; then
+if [[ ( "$MODE" == "reverse" || "$MODE" == "both" ) && -n "$REVERSE_SYNC_REMOTE" ]]; then
     log "Syncing $LOCAL_DIR → $REVERSE_SYNC_REMOTE" "INFO" "sync_start"
 
     REVERSE_OPTS=()
