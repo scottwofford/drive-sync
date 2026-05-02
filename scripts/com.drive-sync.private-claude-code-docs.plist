@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.drive-sync.private-claude-code-docs</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/scottwofford/build/drive-sync/sync.sh</string>
+        <string>/Users/scottwofford/build/drive-sync/configs/private-claude-code-docs.conf</string>
+        <string>--auto</string>
+    </array>
+
+    <!-- Run at login and every 4 hours -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StartInterval</key>
+    <integer>14400</integer>
+
+    <!-- Environment variables needed for rclone -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>/Users/scottwofford</string>
+    </dict>
+
+    <!-- Log stdout/stderr -->
+    <key>StandardOutPath</key>
+    <string>/Users/scottwofford/build/private-claude-code-docs/sync-stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/scottwofford/build/private-claude-code-docs/sync-stderr.log</string>
+</dict>
+</plist>
