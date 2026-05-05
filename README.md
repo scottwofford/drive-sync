@@ -87,3 +87,14 @@ launchctl load ~/Library/LaunchAgents/com.drive-sync.my-project.plist
 ## Config reference
 
 See `example.conf` for all options with documentation.
+
+## Known caveats
+
+**macOS "App Background Activity" toasts.** macOS Background Task Management (BTM) occasionally posts an advisory notification ("`<script>` can run in the background") for each LaunchAgent it tracks. These fire on:
+
+- LaunchAgent registration changes (any edit to the plist's `ProgramArguments`)
+- BTM database migrations after macOS updates (observed 2026-05-05)
+
+There is no clean user-controllable suppression for `BackgroundTaskManagementAgent` in System Settings → Notifications. The toasts are infrequent in practice; expect a brief batch after macOS updates, then quiet for weeks.
+
+Investigation source (private repo): [`session-logs/2026-05-05_drive-sync-notification-fix.csv`](https://github.com/scottwofford/private-claude-code-docs/blob/main/session-logs/2026-05-05_drive-sync-notification-fix.csv).
