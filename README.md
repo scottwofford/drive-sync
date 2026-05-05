@@ -2,6 +2,8 @@
 
 Config-driven Google Drive sync to local directories. Uses rclone for syncing, pandoc for .docx-to-markdown conversion, and macOS notifications for error alerts.
 
+Standalone by design: kept in its own public repo so it can be shared without exposing the private repos that consume it.
+
 ## Features
 
 - Sync Google Drive folders to local directories via rclone
