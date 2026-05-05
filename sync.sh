@@ -75,7 +75,10 @@ SYNC_ERRORS=0
 
 notify_error() {
     local msg="$1"
-    osascript -e "display notification \"$msg\" with title \"Drive Sync\" subtitle \"Error\"" 2>/dev/null || true
+    # Modal alert (not banner): bypasses per-app Notifications toggle, which
+    # for Script Editor is off on Scott's Mac. Async so sync.sh doesn't block
+    # waiting for the OK click.
+    osascript -e "display alert \"Drive Sync Error\" message \"$msg\" as critical" >/dev/null 2>&1 &
 }
 
 log() {
@@ -187,12 +190,14 @@ if [[ "$MODE" == "forward" || "$MODE" == "both" ]]; then
     # --update: skip files where destination is newer than source. Prevents Drive (often
     # stale relative to local git working tree) from overwriting newer local content.
     if [[ -n "$AUTO_MODE" ]]; then
-        rclone copy "$REMOTE:" "$SYNC_DIR" \
+        if ! rclone copy "$REMOTE:" "$SYNC_DIR" \
             --update \
             --drive-export-formats docx \
             "${RCLONE_OPTS[@]}" \
             --quiet \
-            $DRY_RUN 2>> "$LOG_FILE" || true
+            $DRY_RUN 2>> "$LOG_FILE"; then
+            log "rclone forward sync ($REMOTE -> $SYNC_DIR) failed: see $LOG_FILE" "ERROR" "rclone_forward_fail"
+        fi
     else
         rclone copy "$REMOTE:" "$SYNC_DIR" \
             --update \
@@ -216,11 +221,13 @@ if [[ ( "$MODE" == "reverse" || "$MODE" == "both" ) && -n "$REVERSE_SYNC_REMOTE"
     done
 
     if [[ -n "$AUTO_MODE" ]]; then
-        rclone sync "$LOCAL_DIR" "$REVERSE_SYNC_REMOTE:" \
+        if ! rclone sync "$LOCAL_DIR" "$REVERSE_SYNC_REMOTE:" \
             --max-depth 1 \
             "${REVERSE_OPTS[@]}" \
             --quiet \
-            $DRY_RUN 2>> "$LOG_FILE" || true
+            $DRY_RUN 2>> "$LOG_FILE"; then
+            log "rclone reverse sync ($LOCAL_DIR -> $REVERSE_SYNC_REMOTE) failed: see $LOG_FILE" "ERROR" "rclone_reverse_fail"
+        fi
     else
         rclone sync "$LOCAL_DIR" "$REVERSE_SYNC_REMOTE:" \
             --max-depth 1 \
