@@ -185,6 +185,48 @@ if [[ "${SKIP_DANGLING_SHORTCUTS:-true}" == "true" ]]; then
     RCLONE_OPTS+=(--drive-skip-dangling-shortcuts)
 fi
 
+# --- Google Drive API rate-limit handling ---
+# Added 2026-05-07 after diagnosing that sw3-google-drive cron was hitting
+# Google's per-user-per-100-second quota (~1000 reqs/100s) on every run.
+# Scott's personal Drive has 247+ folders — even just listing them blows
+# through the quota in <30s, and rclone fires requests as fast as Google
+# allows by default with no built-in backoff.
+#
+# Symptoms before this fix:
+#   - sync.csv showed `ERROR rclone_forward_fail` with `rateLimitExceeded` payload
+#   - Sync would die mid-way; later folders never reached
+#   - launchctl exit code was 0 (rclone returns 0 even when subfolders fail
+#     for some error classes), so the cron-monitor in private-claude-code-docs/
+#     scripts/auto-log-prompt.sh missed the failure entirely
+#   - Plaud Drive folders created today (2.2 Plaud + Claude-for-Chrome historical)
+#     never appeared in the local mirror
+#
+# Fix flags:
+#   --tpslimit 5             cap at 5 transactions/sec (~500 over 100s window,
+#                            well under 1000 limit, with headroom for bursts)
+#   --tpslimit-burst 1       no burst, strict pacing
+#   --drive-pacer-min-sleep 100ms
+#                            rclone's built-in pacer; 100ms floor between requests
+#   --retries 10             retry whole operation up to 10x on failure
+#   --low-level-retries 20   retry individual network operations 20x
+#   --retries-sleep 30s      30s between retries (clears the 100s quota window)
+#   --fast-list              consolidates folder listing into fewer requests for
+#                            hierarchical scans — large win for 247-folder tree
+#
+# Trade-off: each sync takes longer (~8-12 min vs. ~3 min before, when not
+# rate-limited). But it actually completes vs. previous "die mid-way."
+#
+# Reference: COE 2026-05-07 + Trello https://trello.com/c/XKRT2c4f
+RCLONE_OPTS+=(
+    --tpslimit 5
+    --tpslimit-burst 1
+    --drive-pacer-min-sleep 100ms
+    --retries 10
+    --low-level-retries 20
+    --retries-sleep 30s
+    --fast-list
+)
+
 if [[ "$MODE" == "forward" || "$MODE" == "both" ]]; then
     log "Syncing $REMOTE → $SYNC_DIR" "INFO" "sync_start"
     # --update: skip files where destination is newer than source. Prevents Drive (often
