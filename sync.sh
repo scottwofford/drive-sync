@@ -207,9 +207,14 @@ fi
 #   --tpslimit-burst 1       no burst, strict pacing
 #   --drive-pacer-min-sleep 100ms
 #                            rclone's built-in pacer; 100ms floor between requests
-#   --retries 10             retry whole operation up to 10x on failure
+#   --retries 3              retry whole operation up to 3x on failure
 #   --low-level-retries 20   retry individual network operations 20x
-#   --retries-sleep 30s      30s between retries (clears the 100s quota window)
+#   --retries-sleep 30s      30s between retries (3 × 30s = 90s buffer, just over
+#                            the 100s quota window — handles rate-limit blips
+#                            without burning 7 min on permanent failures like
+#                            auth_fail). Originally set to 10 retries; reduced
+#                            after observing auth-token-expired runs taking ~7 min
+#                            to fail.
 #   --fast-list              consolidates folder listing into fewer requests for
 #                            hierarchical scans — large win for 247-folder tree
 #
@@ -221,7 +226,7 @@ RCLONE_OPTS+=(
     --tpslimit 5
     --tpslimit-burst 1
     --drive-pacer-min-sleep 100ms
-    --retries 10
+    --retries 3
     --low-level-retries 20
     --retries-sleep 30s
     --fast-list
