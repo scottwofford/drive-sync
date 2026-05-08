@@ -157,8 +157,31 @@ fi
 
 PREFLIGHT_REMOTE="$REMOTE"
 [[ "$MODE" == "reverse" ]] && PREFLIGHT_REMOTE="$REVERSE_SYNC_REMOTE"
-if ! rclone lsd "$PREFLIGHT_REMOTE:" --max-depth 0 --quiet 2>/dev/null; then
-    log "rclone cannot connect to $PREFLIGHT_REMOTE — auth token may be expired. Run: rclone config reconnect $PREFLIGHT_REMOTE:" "ERROR" "auth_fail"
+# Capture rclone's stderr to diagnose preflight failures (2026-05-07: previously
+# `2>/dev/null` swallowed the actual error, leaving us guessing whether failures
+# were auth, network, rate-limit, or something else; the generic "auth_fail"
+# log message was an over-confident assumption — actual cause was usually
+# `rateLimitExceeded`).
+#
+# Apply same retry policy as the main rclone sync below — the preflight is a
+# tiny request but shares the same per-user-per-100s quota as everything else,
+# so it can rate-limit too. Without retries here, a single transient quota
+# saturation kills the whole run before the main sync even starts.
+PREFLIGHT_ERR=$(rclone lsd "$PREFLIGHT_REMOTE:" --max-depth 0 --quiet \
+    --retries 3 --retries-sleep 30s --low-level-retries 20 \
+    --drive-pacer-min-sleep 100ms 2>&1 >/dev/null)
+PREFLIGHT_EXIT=$?
+if [ "$PREFLIGHT_EXIT" != "0" ]; then
+    # Detect rate-limit specifically so the log message doesn't mislead future
+    # diagnosticians (the original "auth_fail" assumption cost ~2 hours of
+    # wrong-direction debugging on 2026-05-07).
+    if echo "$PREFLIGHT_ERR" | grep -qi "rateLimitExceeded\|userRateLimitExceeded\|quotaExceeded"; then
+        log "rclone preflight RATE-LIMITED by Google Drive API (exit $PREFLIGHT_EXIT). Per-user-per-100s quota saturated. Retried 3x with backoff and still failed; either too much concurrent rclone activity or quota is genuinely exhausted. Wait 5+ min and retry, OR consider raising quota via own GCP OAuth project. rclone stderr: $PREFLIGHT_ERR" "ERROR" "preflight_rate_limited"
+    elif echo "$PREFLIGHT_ERR" | grep -qi "invalid_grant\|token expired\|unauthorized\|401"; then
+        log "rclone preflight AUTH FAILED (exit $PREFLIGHT_EXIT) — token expired or invalid. Run: rclone config reconnect $PREFLIGHT_REMOTE:" "ERROR" "preflight_auth_fail"
+    else
+        log "rclone preflight FAILED (exit $PREFLIGHT_EXIT) — uncategorized error. rclone stderr: $PREFLIGHT_ERR" "ERROR" "preflight_fail"
+    fi
     exit 1
 fi
 
