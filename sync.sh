@@ -292,7 +292,7 @@ if [[ ( "$MODE" == "reverse" || "$MODE" == "both" ) && -n "$REVERSE_SYNC_REMOTE"
 
     if [[ -n "$AUTO_MODE" ]]; then
         if ! rclone sync "$LOCAL_DIR" "$REVERSE_SYNC_REMOTE:" \
-            --max-depth 1 \
+            --max-depth "${REVERSE_MAX_DEPTH:-1}" \
             "${REVERSE_OPTS[@]}" \
             --quiet \
             $DRY_RUN 2>> "$LOG_FILE"; then
@@ -300,7 +300,7 @@ if [[ ( "$MODE" == "reverse" || "$MODE" == "both" ) && -n "$REVERSE_SYNC_REMOTE"
         fi
     else
         rclone sync "$LOCAL_DIR" "$REVERSE_SYNC_REMOTE:" \
-            --max-depth 1 \
+            --max-depth "${REVERSE_MAX_DEPTH:-1}" \
             "${REVERSE_OPTS[@]}" \
             --progress \
             $DRY_RUN || true
