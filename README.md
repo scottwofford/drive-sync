@@ -84,6 +84,17 @@ EOF
 launchctl load ~/Library/LaunchAgents/com.drive-sync.my-project.plist
 ```
 
+## Logs / how to tell if it's healthy
+
+Two log surfaces, and it matters which you read:
+
+- **`$LOCAL_DIR/sync.csv`** — the real, per-run log (timestamp, level, action, message). Written every run in `--auto` mode; rclone's own stderr is appended here too. **This is the source of truth.** A run that worked ends with a `sync_end,"Sync complete"` row; failures show `ERROR` rows.
+- **The launchd `stdout path`** (e.g. `sync-stdout.log`) — in `--auto` mode the script writes only a **heartbeat** line here at run start and end, each pointing back to `sync.csv`. It intentionally carries no detail.
+
+Health check at a glance: a recent heartbeat (or recent `sync.csv` activity) means the job is alive. A stdout log that looks frozen is **not** evidence of a dead job on its own — before the heartbeat was added (see [COE 2026-07-08](./coes/COE-2026-07-08-sw3-mirror-false-staleness.md)) that file had been silent by design since May 7 and a healthy mirror was wrongly called dead.
+
+Diagnosing "the mirror looks stale": check whether the file is even *in Drive yet* before blaming rclone. `rclone lsl "<remote>:<subfolder>/"` shows the Drive-side modtime (when the file entered Drive). Upstream delivery lag (e.g. Plaud→Zapier→Drive) presents as a stale mirror but is not a sync failure — rclone can only mirror what Drive already has.
+
 ## Config reference
 
 See `example.conf` for all options with documentation.

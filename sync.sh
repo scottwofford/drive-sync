@@ -69,6 +69,23 @@ fi
 
 LOG_FILE="$LOCAL_DIR/sync.csv"
 
+# --- Auto-mode heartbeat to stdout ---
+# In --auto mode, log() writes to $LOG_FILE (sync.csv) and rclone's stderr is
+# redirected there too, so NOTHING is ever written to stdout. launchd captures
+# stdout to the plist's `stdout path` (e.g. sync-stdout.log), which therefore
+# stays frozen forever and *looks* like a dead job even while syncs succeed.
+# That trap cost real diagnostic time on 2026-07-08 (COE-2026-07-08): the
+# configured stdout log had been frozen since May 7, so the mirror was wrongly
+# called "dead" when the launchd job had in fact run and completed cleanly every
+# cycle (the actual cause was upstream Plaud->Drive lag). Emit a heartbeat to
+# stdout at start/end so the configured log reflects liveness and routes the
+# next diagnostician to the real CSV log.
+auto_heartbeat() {
+    [[ -n "$AUTO_MODE" ]] && \
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1 (config=$CONFIG_FILE) — detailed per-run log: $LOG_FILE"
+}
+auto_heartbeat "heartbeat: run started"
+
 # --- Helpers ---
 
 SYNC_ERRORS=0
@@ -121,7 +138,11 @@ convert_docx_to_md() {
             log "Failed to convert $(basename "$docx_file")" "WARN" "convert"
             ((failed++))
         fi
-    done < <(find "$dir" -name "*.docx" -not -path "*/.git/*" -not -path "*/scripts/*" -print0)
+    # Skip Office lock/temp files (~$foo.docx): they are not real documents,
+    # pandoc always fails on them, and each failure logged a WARN row — ~22 per
+    # run on Scott's personal Drive, which buried the real signal in sync.csv
+    # (noted while root-causing the false-staleness COE-2026-07-08).
+    done < <(find "$dir" -name "*.docx" -not -name '~$*' -not -path "*/.git/*" -not -path "*/scripts/*" -print0)
 
     echo "$converted $failed"
 }
@@ -376,3 +397,5 @@ if [[ -n "$AUTO_COMMIT" && "${GIT_PUSH:-false}" == "true" ]]; then
 elif [[ -n "$AUTO_COMMIT" && "${GIT_PUSH:-false}" == "false" ]]; then
     log "Git push disabled in config — skipping" "INFO" "commit_skip"
 fi
+
+auto_heartbeat "heartbeat: run finished ($SYNC_ERRORS error(s) this run)"
