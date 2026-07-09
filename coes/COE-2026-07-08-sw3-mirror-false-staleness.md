@@ -20,7 +20,9 @@ The one real defect is a **logging trap**: in `--auto` mode the script writes no
 
 Two non-bugs read as one bug, plus one real trap:
 
-1. **Upstream lag, not a sync failure.** rclone can only mirror what is in Drive. The Jul 7 Plaud recordings were not in Drive until Jul 8 morning (device/Zapier propagation), so there was nothing to pull Jul 3–7. Confirmed authoritatively by Drive-side modtimes (`rclone lsl "gdrive-personal:2.2 Plaud/"`): every "missing" file has a Drive modtime of Jul 8 10:33+, not Jul 7.
+1. **Upstream lag, not a sync failure.** rclone can only mirror what is in Drive. The Jul 7 Plaud recordings were not in Drive until Jul 8 morning (device/Zapier propagation), so there was nothing to pull Jul 3–7.
+   - **Primary proof (modtime-independent):** the forward step is `rclone copy` (line ~263), which transfers any source file that is *missing* at the destination — `--update` only affects files present at both ends. The local mirror did not have `Mr col` etc. until Jul 8, and the Jul 7 runs (11:48, 15:56, 21:00) all completed "Sync complete". If those files had been in Drive on Jul 7, a successful `copy` run would have pulled them (they were absent locally, so `--update` never applies). They weren't pulled until Jul 8 ⇒ they weren't in Drive until Jul 8. This holds regardless of how modtimes are interpreted.
+   - **Corroborating (weaker):** `rclone lsl "gdrive-personal:2.2 Plaud/"` shows Drive-side modtimes of Jul 8 10:33+ for those files. Treat this as consistent-with, not proof-of, upload time — an upstream tool (Zapier) *could* stamp a custom modified time, so modtime alone would not settle it. The missing-file-not-copied argument above is what settles it.
 2. **Overnight sleep batches runs.** The 14h run gap was the laptop asleep, not a dead job.
 3. **The logging trap (the real, fixable defect).** In `--auto` mode `log()` writes only to `$LOCAL_DIR/sync.csv`, and rclone's stderr is redirected there too (`2>> "$LOG_FILE"`). Nothing is ever written to stdout, so launchd's configured `stdout path` (`sync-stdout.log`) never updates and has looked frozen since the auto-mode/CSV logging landed (~May 7). A diagnostician who checks that file concludes the job is dead.
 
@@ -33,6 +35,7 @@ The `sync-stdout.log` path is the obvious place to look ("what does the launchd 
 | Issue | Fix | Where |
 |---|---|---|
 | Configured stdout log dead-by-design → looks like a dead job | `--auto` mode now emits a heartbeat line to stdout at run start and end, including a pointer to the real `sync.csv` | `sync.sh` (`auto_heartbeat`) |
+| END heartbeat only fired on the success path → a dead sync (preflight `exit 1`) would print START-only heartbeats and look *recently active* (worse than the original frozen-log trap) | Moved END heartbeat into an `EXIT` trap so it fires on every exit path; a dying job now shows a repeating `run exited (code 1 ...)` instead of a fresh-looking START. Caught in adversarial review before this COE was final; verified against a forced early-exit run | `sync.sh` (`trap ... EXIT`) |
 | Stale 28MB `sync-stdout.log` frozen since May 7 | Truncated and seeded with a header explaining the heartbeat-only design and pointing to `sync.csv` | `~/build/sw3-google-drive/sync-stdout.log` |
 | ~22 `WARN Failed to convert ~$*.docx` rows per run burying real signal in `sync.csv` | Skip Office lock/temp files (`~$*`) in the docx→md conversion `find` | `sync.sh` (`convert_docx_to_md`) |
 | Logging architecture undocumented | Added a "Logs / how to tell if it's healthy" section | `drive-sync/README.md` |

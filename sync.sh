@@ -90,6 +90,17 @@ auto_heartbeat "heartbeat: run started"
 
 SYNC_ERRORS=0
 
+# END heartbeat via an EXIT trap so it fires on EVERY exit path, including the
+# preflight rate-limit / auth-fail `exit 1` paths below. Without the trap the
+# END line only prints on the fully-successful path, so a real sync death
+# (expired token, sustained rate-limit) would emit START-only heartbeats every
+# run — making a DEAD job look recently-active. That is worse than the frozen-log
+# trap this fix replaced (false confidence beats false alarm at inviting
+# neglect). The trap makes the terminal line always present: exit 0 = clean run,
+# a repeating "run exited (code 1 ...)" = dying at preflight. (Hardened after
+# adversarial review, 2026-07-08.)
+trap 'auto_heartbeat "heartbeat: run exited (code $?, $SYNC_ERRORS error(s))"' EXIT
+
 notify_error() {
     local msg="$1"
     # Modal alert (not banner): bypasses per-app Notifications toggle, which
@@ -398,4 +409,5 @@ elif [[ -n "$AUTO_COMMIT" && "${GIT_PUSH:-false}" == "false" ]]; then
     log "Git push disabled in config — skipping" "INFO" "commit_skip"
 fi
 
-auto_heartbeat "heartbeat: run finished ($SYNC_ERRORS error(s) this run)"
+# END heartbeat is emitted by the EXIT trap set near the top, so it covers the
+# early-exit paths too — no explicit call here.
