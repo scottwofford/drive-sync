@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.sw-prv.calibration-reconcile</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/scottwofford/build/sw-prv/scripts/reconcile-calibration.sh</string>
+    </array>
+
+    <!-- Run at login and every 2 hours -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StartInterval</key>
+    <integer>7200</integer>
+
+    <!-- Environment: rclone + git need these on PATH; HOME anchors keychain + config -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <key>HOME</key>
+        <string>/Users/scottwofford</string>
+    </dict>
+
+    <!-- launchd stdout/stderr (the script's own progress goes to calibration-reconcile.log) -->
+    <key>StandardOutPath</key>
+    <string>/Users/scottwofford/build/sw-prv/calibration-reconcile-stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/scottwofford/build/sw-prv/calibration-reconcile-stderr.log</string>
+</dict>
+</plist>
